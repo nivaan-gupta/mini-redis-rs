@@ -4,4 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+command = { path = "../command" }
+protocol = { path = "../protocol" }
 bytes = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
