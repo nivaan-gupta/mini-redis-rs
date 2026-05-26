@@ -14,12 +14,6 @@ fn wait_for_port(port: u16, timeout: Duration) -> bool {
 
 #[test]
 fn redis_cli_basic_commands() {
-    // Check if redis-cli is available
-    if Command::new("which").arg("redis-cli").status().is_err() {
-        eprintln!("redis-cli not found, skipping test");
-        return;
-    }
-
     // Build first so the binary exists.
     let build = Command::new(env!("CARGO"))
         .args(["build", "-p", "server", "--bin", "mini-redis"])
@@ -46,22 +40,30 @@ fn redis_cli_basic_commands() {
         "server didn't start"
     );
 
-    let run = |args: &[&str]| -> String {
-        let out = Command::new("redis-cli")
+    let run = |args: &[&str]| -> Option<String> {
+        Command::new("redis-cli")
             .args(["-p", "16380"])
             .args(args)
             .output()
-            .unwrap();
-        String::from_utf8_lossy(&out.stdout).trim().to_string()
+            .ok()
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
 
-    assert_eq!(run(&["PING"]), "PONG");
-    assert_eq!(run(&["SET", "k", "v"]), "OK");
-    assert_eq!(run(&["GET", "k"]), "v");
-    assert_eq!(run(&["INCR", "n"]), "1");
-    assert_eq!(run(&["INCR", "n"]), "2");
-    assert_eq!(run(&["DEL", "k"]), "1");
-    assert_eq!(run(&["GET", "k"]), "");
+    // Skip test if redis-cli is not available
+    if run(&["PING"]).is_none() {
+        eprintln!("redis-cli not found, skipping test");
+        server.kill().ok();
+        let _ = server.wait();
+        return;
+    }
+
+    assert_eq!(run(&["PING"]), Some("PONG".into()));
+    assert_eq!(run(&["SET", "k", "v"]), Some("OK".into()));
+    assert_eq!(run(&["GET", "k"]), Some("v".into()));
+    assert_eq!(run(&["INCR", "n"]), Some("1".into()));
+    assert_eq!(run(&["INCR", "n"]), Some("2".into()));
+    assert_eq!(run(&["DEL", "k"]), Some("1".into()));
+    assert_eq!(run(&["GET", "k"]), Some("".into()));
 
     server.kill().unwrap();
     let _ = server.wait();
