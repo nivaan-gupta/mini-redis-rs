@@ -2,7 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "mini-redis", version, about = "A Redis-compatible KV store in Rust")]
+#[command(
+    name = "mini-redis",
+    version,
+    about = "A Redis-compatible KV store in Rust"
+)]
 struct Args {
     /// TCP port to bind
     #[arg(short, long, default_value_t = 6380)]
