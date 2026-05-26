@@ -8,3 +8,4 @@ publish = false
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tempfile = { workspace = true }
+libc = "0.2"
