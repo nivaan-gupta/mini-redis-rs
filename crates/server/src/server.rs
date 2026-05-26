@@ -1,5 +1,6 @@
 use crate::conn::handle_connection;
 use persistence::{Snapshot, Wal};
+use replication::{channel, run_replica, run_replication_listener, ReplStream};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,89 +8,87 @@ use store::Store;
 use tokio::net::TcpListener;
 
 pub struct Server {
-    port: u16,
-    data_dir: PathBuf,
-    fsync_every: bool,
+    pub port: u16,
+    pub repl_port: u16,
+    pub data_dir: PathBuf,
+    pub fsync_every: bool,
+    pub replicaof: Option<String>,
 }
 
 impl Server {
-    pub fn new(port: u16, data_dir: PathBuf, fsync_every: bool) -> Self {
-        Self {
-            port,
-            data_dir,
-            fsync_every,
-        }
-    }
-
     pub async fn run(self) -> anyhow::Result<()> {
         tokio::fs::create_dir_all(&self.data_dir).await?;
-        let snap_path = self.data_dir.join("snapshot.rdb");
-        let wal_path = self.data_dir.join("wal.log");
+        let snap = Snapshot::new(self.data_dir.join("snapshot.rdb"));
+        let wal = Arc::new(Wal::open(self.data_dir.join("wal.log"), self.fsync_every).await?);
 
-        // 1. Load snapshot if present.
         let store = Store::new();
-        let snap = Snapshot::new(&snap_path);
-        if let Some(data) = snap.read().await? {
-            tracing::info!(keys = data.len(), "loaded snapshot");
-            store.load(data).await;
+        if let Some(d) = snap.read().await? { store.load(d).await; }
+        for r in wal.replay().await? { store.apply(&r.to_command()).await; }
+
+        let read_only = self.replicaof.is_some();
+
+        // If we're a replica, kick off the follower task.
+        if let Some(leader) = &self.replicaof {
+            let s = store.clone();
+            let leader_addr = leader.clone();
+            tokio::spawn(async move {
+                if let Err(e) = run_replica(&leader_addr, s).await {
+                    tracing::error!(error = %e, "replica task exited");
+                }
+            });
         }
 
-        // 2. Replay WAL.
-        let wal = Arc::new(Wal::open(&wal_path, self.fsync_every).await?);
-        let records = wal.replay().await?;
-        if !records.is_empty() {
-            tracing::info!(records = records.len(), "replaying WAL");
-            for r in &records {
-                store.apply(&r.to_command()).await;
-            }
-        }
+        // If we're a leader, kick off the replication listener.
+        let repl_tx: Option<ReplStream> = if !read_only {
+            let tx = channel();
+            let s = store.clone();
+            let addr = format!("0.0.0.0:{}", self.repl_port);
+            let tx_for_task = tx.clone();
+            tokio::spawn(async move {
+                if let Err(e) = run_replication_listener(&addr, tx_for_task, s).await {
+                    tracing::error!(error = %e, "replication listener exited");
+                }
+            });
+            Some(tx)
+        } else {
+            None
+        };
 
-        // 3. Start TCP listener.
-        let addr = format!("0.0.0.0:{}", self.port);
-        let listener = TcpListener::bind(&addr).await?;
-        tracing::info!(%addr, "listening");
-
-        // 4. Background TTL sweep.
-        let sweep_store = store.clone();
+        // TTL sweep.
+        let s = store.clone();
         tokio::spawn(async move {
             let mut t = tokio::time::interval(Duration::from_secs(5));
-            loop {
-                t.tick().await;
-                sweep_store.sweep_expired().await;
-            }
+            loop { t.tick().await; s.sweep_expired().await; }
         });
 
-        // 5. Periodic snapshot every 5 min.
-        let snap_store = store.clone();
-        let snap_for_task = Snapshot::new(&snap_path);
-        let wal_for_task = wal.clone();
-        tokio::spawn(async move {
-            let mut t = tokio::time::interval(Duration::from_secs(300));
-            t.tick().await; // skip first immediate tick
-            loop {
+        // Periodic snapshot (leader only).
+        if !read_only {
+            let snap_store = store.clone();
+            let snap_path = self.data_dir.join("snapshot.rdb");
+            let wal2 = wal.clone();
+            tokio::spawn(async move {
+                let mut t = tokio::time::interval(Duration::from_secs(300));
                 t.tick().await;
-                let data = snap_store.snapshot().await;
-                if let Err(e) = snap_for_task.write(&data).await {
-                    tracing::warn!(error = %e, "snapshot failed");
-                    continue;
+                let snap = Snapshot::new(&snap_path);
+                loop {
+                    t.tick().await;
+                    let data = snap_store.snapshot().await;
+                    if snap.write(&data).await.is_ok() { let _ = wal2.truncate().await; }
                 }
-                if let Err(e) = wal_for_task.truncate().await {
-                    tracing::warn!(error = %e, "wal truncate failed");
-                }
-                tracing::info!("snapshot + wal truncate complete");
-            }
-        });
+            });
+        }
 
-        // 6. Accept loop.
+        let addr = format!("0.0.0.0:{}", self.port);
+        let listener = TcpListener::bind(&addr).await?;
+        tracing::info!(%addr, role = if read_only { "replica" } else { "leader" }, "listening");
+
         loop {
-            let (stream, peer) = listener.accept().await?;
-            tracing::debug!(?peer, "accepted");
+            let (s, _) = listener.accept().await?;
             let store = store.clone();
             let wal = wal.clone();
+            let tx = repl_tx.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle_connection(stream, store, wal).await {
-                    tracing::warn!(error = %e, "connection error");
-                }
+                let _ = handle_connection(s, store, wal, tx, read_only).await;
             });
         }
     }

@@ -8,6 +8,7 @@ protocol = { path = "../protocol" }
 command = { path = "../command" }
 store = { path = "../store" }
 persistence = { path = "../persistence" }
+replication = { path = "../replication" }
 tokio = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
