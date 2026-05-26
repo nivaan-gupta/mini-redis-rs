@@ -1,14 +1,9 @@
 use clap::Parser;
 use server::Server;
 use std::path::PathBuf;
-use store::Store;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "mini-redis",
-    version,
-    about = "A Redis-compatible KV store in Rust"
-)]
+#[command(name = "mini-redis", version)]
 struct Args {
     #[arg(short, long, default_value_t = 6380)]
     port: u16,
@@ -28,8 +23,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
     let args = Args::parse();
-    tracing::info!(?args, "starting mini-redis");
-
-    let store = Store::new();
-    Server::new(args.port, store).run().await
+    Server::new(args.port, args.data_dir, args.fsync_every_write)
+        .run()
+        .await
 }

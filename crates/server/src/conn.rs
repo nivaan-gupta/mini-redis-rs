@@ -1,18 +1,28 @@
 use bytes::BytesMut;
 use command::parse_command;
+use persistence::{Wal, WalRecord};
 use protocol::{encode, parse, RespError, RespValue};
 use std::sync::Arc;
 use store::Store;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-pub async fn handle_connection(mut stream: TcpStream, store: Arc<Store>) -> std::io::Result<()> {
+pub async fn handle_connection(
+    mut stream: TcpStream,
+    store: Arc<Store>,
+    wal: Arc<Wal>,
+) -> std::io::Result<()> {
     let mut buf = BytesMut::with_capacity(4096);
     loop {
         match parse(&mut buf) {
             Ok(value) => {
                 let response = match parse_command(value) {
-                    Ok(cmd) => store.apply(&cmd).await,
+                    Ok(cmd) => {
+                        if let Some(rec) = WalRecord::from_command(&cmd) {
+                            wal.append(&rec).await?;
+                        }
+                        store.apply(&cmd).await
+                    }
                     Err(e) => RespValue::error(format!("ERR {}", e)),
                 };
                 stream.write_all(&encode(&response)).await?;

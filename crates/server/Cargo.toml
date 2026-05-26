@@ -7,6 +7,7 @@ edition.workspace = true
 protocol = { path = "../protocol" }
 command = { path = "../command" }
 store = { path = "../store" }
+persistence = { path = "../persistence" }
 tokio = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
