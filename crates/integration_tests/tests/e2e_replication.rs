@@ -12,13 +12,13 @@ fn wait_for_port(port: u16, t: Duration) -> bool {
     false
 }
 
-fn cli(port: u16, args: &[&str]) -> String {
-    let out = Command::new("redis-cli")
+fn cli(port: u16, args: &[&str]) -> Option<String> {
+    Command::new("redis-cli")
         .args(["-p", &port.to_string()])
         .args(args)
         .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 fn spawn(bin: &std::path::Path, args: &[&str]) -> Child {
@@ -89,22 +89,22 @@ fn writes_to_leader_appear_on_two_replicas() {
     // Wait a moment for snapshot to arrive on replicas.
     std::thread::sleep(Duration::from_millis(500));
 
-    assert_eq!(cli(26380, &["SET", "k1", "v1"]), "OK");
-    assert_eq!(cli(26380, &["SET", "k2", "v2"]), "OK");
-    assert_eq!(cli(26380, &["INCR", "n"]), "1");
+    assert_eq!(cli(26380, &["SET", "k1", "v1"]), Some("OK".into()));
+    assert_eq!(cli(26380, &["SET", "k2", "v2"]), Some("OK".into()));
+    assert_eq!(cli(26380, &["INCR", "n"]), Some("1".into()));
 
     // Allow replication to catch up.
     std::thread::sleep(Duration::from_millis(500));
 
-    assert_eq!(cli(26381, &["GET", "k1"]), "v1");
-    assert_eq!(cli(26381, &["GET", "n"]), "1");
-    assert_eq!(cli(26382, &["GET", "k2"]), "v2");
+    assert_eq!(cli(26381, &["GET", "k1"]), Some("v1".into()));
+    assert_eq!(cli(26381, &["GET", "n"]), Some("1".into()));
+    assert_eq!(cli(26382, &["GET", "k2"]), Some("v2".into()));
 
     // Writes to replicas rejected.
     let out = cli(26382, &["SET", "rejected", "x"]);
     assert!(
-        out.contains("READONLY"),
-        "expected READONLY error, got: {out}"
+        out.as_ref().is_some_and(|s| s.contains("READONLY")),
+        "expected READONLY error, got: {out:?}"
     );
 
     let _ = leader.kill();

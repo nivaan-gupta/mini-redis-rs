@@ -12,13 +12,13 @@ fn wait_for_port(port: u16, t: Duration) -> bool {
     false
 }
 
-fn cli(port: u16, args: &[&str]) -> String {
-    let out = Command::new("redis-cli")
+fn cli(port: u16, args: &[&str]) -> Option<String> {
+    Command::new("redis-cli")
         .args(["-p", &port.to_string()])
         .args(args)
         .output()
-        .unwrap();
-    String::from_utf8_lossy(&out.stdout).trim().to_string()
+        .ok()
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 #[test]
@@ -46,16 +46,16 @@ fn data_survives_kill_minus_9() {
     assert!(wait_for_port(16381, Duration::from_secs(5)));
 
     // Skip test if redis-cli is not available
-    if cli(16381, &["PING"]).is_empty() {
+    if cli(16381, &["PING"]).is_none() {
         eprintln!("redis-cli not found or server not responding, skipping test");
         child.kill().unwrap();
         let _ = child.wait();
         return;
     }
 
-    assert_eq!(cli(16381, &["SET", "foo", "bar"]), "OK");
-    assert_eq!(cli(16381, &["INCR", "n"]), "1");
-    assert_eq!(cli(16381, &["INCR", "n"]), "2");
+    assert_eq!(cli(16381, &["SET", "foo", "bar"]), Some("OK".into()));
+    assert_eq!(cli(16381, &["INCR", "n"]), Some("1".into()));
+    assert_eq!(cli(16381, &["INCR", "n"]), Some("2".into()));
 
     // Hard kill.
     unsafe {
@@ -73,8 +73,8 @@ fn data_survives_kill_minus_9() {
         .unwrap();
     assert!(wait_for_port(16381, Duration::from_secs(5)));
 
-    assert_eq!(cli(16381, &["GET", "foo"]), "bar");
-    assert_eq!(cli(16381, &["GET", "n"]), "2");
+    assert_eq!(cli(16381, &["GET", "foo"]), Some("bar".into()));
+    assert_eq!(cli(16381, &["GET", "n"]), Some("2".into()));
 
     child2.kill().unwrap();
     let _ = child2.wait();
