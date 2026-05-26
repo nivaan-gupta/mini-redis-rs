@@ -1,0 +1,1 @@
+//! Persistence: WAL + snapshot + recovery.
