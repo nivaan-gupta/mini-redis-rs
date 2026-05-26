@@ -2,7 +2,7 @@ use bytes::Bytes;
 use persistence::WalRecord;
 use std::sync::Arc;
 use store::{Entry, Store};
-use tokio::io::{AsyncReadExt};
+use tokio::io::AsyncReadExt;
 use tokio::net::TcpStream;
 
 pub async fn run_replica(leader_addr: &str, store: Arc<Store>) -> anyhow::Result<()> {

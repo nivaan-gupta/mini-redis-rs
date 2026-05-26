@@ -22,11 +22,15 @@ pub async fn handle_connection(
                 let response = match parse_command(value) {
                     Ok(cmd) => {
                         if read_only && WalRecord::from_command(&cmd).is_some() {
-                            RespValue::error("READONLY You can't write against a read only replica.")
+                            RespValue::error(
+                                "READONLY You can't write against a read only replica.",
+                            )
                         } else {
                             if let Some(rec) = WalRecord::from_command(&cmd) {
                                 wal.append(&rec).await?;
-                                if let Some(tx) = &repl_tx { let _ = tx.send(rec); }
+                                if let Some(tx) = &repl_tx {
+                                    let _ = tx.send(rec);
+                                }
                             }
                             store.apply(&cmd).await
                         }
@@ -37,7 +41,9 @@ pub async fn handle_connection(
             }
             Err(RespError::Incomplete) => {
                 let n = stream.read_buf(&mut buf).await?;
-                if n == 0 { return Ok(()); }
+                if n == 0 {
+                    return Ok(());
+                }
             }
             Err(other) => {
                 let err = RespValue::error(format!("ERR {}", other));

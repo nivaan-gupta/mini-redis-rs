@@ -22,8 +22,12 @@ impl Server {
         let wal = Arc::new(Wal::open(self.data_dir.join("wal.log"), self.fsync_every).await?);
 
         let store = Store::new();
-        if let Some(d) = snap.read().await? { store.load(d).await; }
-        for r in wal.replay().await? { store.apply(&r.to_command()).await; }
+        if let Some(d) = snap.read().await? {
+            store.load(d).await;
+        }
+        for r in wal.replay().await? {
+            store.apply(&r.to_command()).await;
+        }
 
         let read_only = self.replicaof.is_some();
 
@@ -58,7 +62,10 @@ impl Server {
         let s = store.clone();
         tokio::spawn(async move {
             let mut t = tokio::time::interval(Duration::from_secs(5));
-            loop { t.tick().await; s.sweep_expired().await; }
+            loop {
+                t.tick().await;
+                s.sweep_expired().await;
+            }
         });
 
         // Periodic snapshot (leader only).
@@ -73,7 +80,9 @@ impl Server {
                 loop {
                     t.tick().await;
                     let data = snap_store.snapshot().await;
-                    if snap.write(&data).await.is_ok() { let _ = wal2.truncate().await; }
+                    if snap.write(&data).await.is_ok() {
+                        let _ = wal2.truncate().await;
+                    }
                 }
             });
         }

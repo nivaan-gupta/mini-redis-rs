@@ -1,16 +1,18 @@
+use bincode;
 use command::Command;
 use persistence::WalRecord;
 use std::sync::Arc;
 use store::Store;
-use tokio::net::{TcpListener, TcpStream};
 use tokio::io::AsyncWriteExt;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::broadcast;
-use bincode;
 
 /// The leader broadcasts WalRecord events to replicas via this channel.
 pub type ReplStream = broadcast::Sender<WalRecord>;
 
-pub fn channel() -> ReplStream { broadcast::channel(1024).0 }
+pub fn channel() -> ReplStream {
+    broadcast::channel(1024).0
+}
 
 /// Notify replicas of a committed mutating command. No-op for read-only.
 pub fn broadcast_command(tx: &ReplStream, cmd: &Command) {
@@ -20,7 +22,11 @@ pub fn broadcast_command(tx: &ReplStream, cmd: &Command) {
 }
 
 /// Run the replication listener on a separate port for replicas to connect.
-pub async fn run_replication_listener(addr: &str, tx: ReplStream, store: Arc<Store>) -> anyhow::Result<()> {
+pub async fn run_replication_listener(
+    addr: &str,
+    tx: ReplStream,
+    store: Arc<Store>,
+) -> anyhow::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     tracing::info!(%addr, "replication listener up");
     loop {
@@ -43,10 +49,14 @@ async fn handle_replica(
 ) -> anyhow::Result<()> {
     // 1. Send snapshot.
     let snapshot = store.snapshot().await;
-    let serializable: std::collections::HashMap<Vec<u8>, store::Entry> =
-        snapshot.iter().map(|(k, v)| (k.to_vec(), v.clone())).collect();
+    let serializable: std::collections::HashMap<Vec<u8>, store::Entry> = snapshot
+        .iter()
+        .map(|(k, v)| (k.to_vec(), v.clone()))
+        .collect();
     let snap_bytes = bincode::serialize(&serializable)?;
-    stream.write_all(&(snap_bytes.len() as u32).to_be_bytes()).await?;
+    stream
+        .write_all(&(snap_bytes.len() as u32).to_be_bytes())
+        .await?;
     stream.write_all(&snap_bytes).await?;
     stream.flush().await?;
     tracing::info!(bytes = snap_bytes.len(), "snapshot sent to replica");
@@ -55,7 +65,9 @@ async fn handle_replica(
     loop {
         let rec = rx.recv().await?;
         let bytes = bincode::serialize(&rec)?;
-        stream.write_all(&(bytes.len() as u32).to_be_bytes()).await?;
+        stream
+            .write_all(&(bytes.len() as u32).to_be_bytes())
+            .await?;
         stream.write_all(&bytes).await?;
         stream.flush().await?;
     }
