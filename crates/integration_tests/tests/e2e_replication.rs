@@ -37,7 +37,7 @@ fn writes_to_leader_appear_on_two_replicas() {
     let r2_dir = tempfile::tempdir().unwrap();
 
     Command::new(env!("CARGO"))
-        .args(["build", "--bin", "mini-redis"])
+        .args(["build", "-p", "server", "--bin", "mini-redis"])
         .status()
         .unwrap();
     let bin = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))

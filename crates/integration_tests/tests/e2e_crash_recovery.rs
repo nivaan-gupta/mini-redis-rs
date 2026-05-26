@@ -26,7 +26,7 @@ fn data_survives_kill_minus_9() {
     let dir = tempfile::tempdir().unwrap();
 
     Command::new(env!("CARGO"))
-        .args(["build", "--bin", "mini-redis"])
+        .args(["build", "-p", "server", "--bin", "mini-redis"])
         .status()
         .unwrap();
     let bin = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
