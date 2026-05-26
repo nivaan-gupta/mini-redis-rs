@@ -16,7 +16,13 @@ pub enum RespValue {
 }
 
 impl RespValue {
-    pub fn ok() -> Self { RespValue::SimpleString("OK".into()) }
-    pub fn null_bulk() -> Self { RespValue::BulkString(None) }
-    pub fn error(msg: impl Into<String>) -> Self { RespValue::Error(msg.into()) }
+    pub fn ok() -> Self {
+        RespValue::SimpleString("OK".into())
+    }
+    pub fn null_bulk() -> Self {
+        RespValue::BulkString(None)
+    }
+    pub fn error(msg: impl Into<String>) -> Self {
+        RespValue::Error(msg.into())
+    }
 }
