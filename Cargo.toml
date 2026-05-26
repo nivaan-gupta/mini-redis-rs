@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/protocol",
+    "crates/command",
+    "crates/store",
+    "crates/persistence",
+    "crates/replication",
+    "crates/server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Nivaan Gupta <nivaangupta2005@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/nivaan-gupta/mini-redis-rs"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+proptest = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3"
+anyhow = "1"
