@@ -28,8 +28,11 @@ fn redis_cli_basic_commands() {
         .unwrap()
         .join("target/debug/mini-redis");
 
+    let data_dir = tempfile::tempdir().unwrap();
+
     let mut server = Command::new(&bin)
-        .args(["--port", "16380"])
+        .args(["--port", "16380", "--data-dir"])
+        .arg(data_dir.path())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -67,4 +70,5 @@ fn redis_cli_basic_commands() {
 
     server.kill().unwrap();
     let _ = server.wait();
+    std::thread::sleep(std::time::Duration::from_millis(200));
 }
